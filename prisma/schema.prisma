@@ -1,0 +1,118 @@
+// Schéma NaYa — dev local en SQLite, portable vers PostgreSQL (Supabase) en production
+// en changeant uniquement "provider" et DATABASE_URL.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// SQLite (Prisma) ne supporte pas les enums natifs : les valeurs ci-dessous restent
+// des chaînes contraintes (voir src/types et src/lib/validation pour les unions TS/zod).
+// "ListingCategory": IMMOBILIER | VEHICULE | ELECTRONIQUE | AUTRE
+// "TransactionType": VENTE | LOCATION | TROC
+// "ListingStatus": DISPONIBLE | EN_NEGOCIATION | CLOTUREE
+// "SellerPlan": GRATUIT | PRO
+
+model User {
+  id         String   @id @default(cuid())
+  fullName   String
+  phone      String   @unique
+  verifiedAt DateTime?
+  plan       String   @default("GRATUIT")
+  freeQuota  Int      @default(3)
+  createdAt  DateTime @default(now())
+
+  listings Listing[]
+  sessions Session[]
+  otpCodes OtpCode[]
+  payments Payment[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// Code à usage unique (canal SMS) ou trace d'appel flash/vocal — vérification téléphonique
+// sans lecture requise (voir lib/providers/otp-provider).
+model OtpCode {
+  id         String    @id @default(cuid())
+  phone      String
+  code       String
+  channel    String // "sms" | "voice_announce" | "voice_flash"
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([phone])
+}
+
+model Listing {
+  id              String          @id @default(cuid())
+  sellerId        String
+  seller          User            @relation(fields: [sellerId], references: [id])
+  category        String
+  transactionType String
+  priceAmount     Int? // FCFA ; null si à négocier / troc
+  priceNegotiable Boolean         @default(false)
+  city            String?
+  voiceNoteUrl    String
+  transcript      String?
+  status          String          @default("DISPONIBLE")
+  isBoosted       Boolean         @default(false)
+  boostExpiresAt  DateTime?
+  isPaid          Boolean         @default(false) // publiée hors quota gratuit
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  photos          Photo[]
+  contactRequests ContactRequest[]
+
+  @@index([category])
+  @@index([status])
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id])
+  url       String
+  createdAt DateTime @default(now())
+}
+
+// Demande de mise en contact d'un client vers le vendeur d'une annonce.
+model ContactRequest {
+  id              String    @id @default(cuid())
+  listingId       String
+  listing         Listing   @relation(fields: [listingId], references: [id])
+  clientFullName  String
+  clientPhone     String
+  voiceMessageUrl String?
+  verifiedAt      DateTime?
+  status          String    @default("en_attente") // en_attente | appel_initie | traitee
+  createdAt       DateTime  @default(now())
+}
+
+// Paiements liés au service NaYa uniquement (jamais à la transaction du bien lui-même).
+model Payment {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  type             String // "annonce_supplementaire" | "boost" | "abonnement_pro"
+  amount           Int // FCFA
+  provider         String // "dev" | "orange_money" | "moov_money" | "airtel_money"
+  status           String   @default("confirme")
+  relatedListingId String?
+  createdAt        DateTime @default(now())
+}

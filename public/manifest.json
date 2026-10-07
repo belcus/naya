@@ -1,0 +1,9 @@
+{
+  "name": "NaYa",
+  "short_name": "NaYa",
+  "description": "Vendre, louer, échanger directement — sans intermédiaire",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#0DB02B"
+}

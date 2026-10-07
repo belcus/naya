@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+dev.db
+dev.db-journal
+.env
+public/uploads/*
+!public/uploads/.gitkeep
+npm-install.log
+*.tsbuildinfo
